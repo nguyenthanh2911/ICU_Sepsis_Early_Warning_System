@@ -105,7 +105,7 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
     patient_obj = Patient.objects.filter(patient_id=patient_id).first()
     patient_name = patient_obj.name if patient_obj else patient_id
     patient_age = patient_obj.age if patient_obj else None
-    patient_gender = (patient_obj.gender or "").lower() if patient_obj else ""
+    patient_gender = (patient_obj.gender or "").upper() if patient_obj else ""
     patient_ward = patient_obj.ward if patient_obj else "ICU"
 
     records = list(reversed(list(qs)))

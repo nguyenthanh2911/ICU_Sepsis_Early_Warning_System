@@ -34,13 +34,13 @@
       <!-- Avatar & Patient Info Card -->
       <div class="pd-avatar-card">
         <img
-          src="{% if patient_gender == 'female' or patient_gender == 'nữ' %}{% static 'dashboard/images/avatar_female.png' %}{% else %}{% static 'dashboard/images/avatar_male.png' %}{% endif %}"
+          src="{% if patient_gender == 'F' %}{% static 'dashboard/images/avatar_female.png' %}{% else %}{% static 'dashboard/images/avatar_male.png' %}{% endif %}"
           alt="Avatar"
           class="pd-avatar-img"
         />
         <div class="pd-avatar-name">{{ patient_name }}</div>
         <div class="pd-avatar-meta">
-          {% if patient_gender == 'female' or patient_gender == 'nữ' %}♀{% else %}♂{% endif %} {{ patient_gender|capfirst }}
+          {% if patient_gender == 'F' %}♀ Nữ{% else %}♂ Nam{% endif %}
         </div>
         {% if patient_age %}
         <div class="pd-avatar-meta">🎂 {{ patient_age }} tuổi</div>
