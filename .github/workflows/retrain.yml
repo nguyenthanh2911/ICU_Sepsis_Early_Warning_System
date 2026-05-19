@@ -43,4 +43,5 @@ jobs:
         env:
           MLFLOW_TRACKING_URI: http://localhost:5000
           DATABASE_URL: postgresql+psycopg2://sepsis_user:sepsis_pass@localhost:5432/sepsis_db
+          PYTHONPATH: ${{ github.workspace }}
         run: python -m monitoring.retrain_flow
