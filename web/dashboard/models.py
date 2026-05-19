@@ -65,3 +65,16 @@ class Alert(models.Model):
     class Meta:
         managed = False
         db_table = "alerts"
+
+
+class Patient(models.Model):
+    patient_id = models.CharField(max_length=20, primary_key=True)
+    name       = models.CharField(max_length=100)
+    age        = models.IntegerField(null=True, blank=True)
+    gender     = models.CharField(max_length=10, null=True, blank=True)
+    ward       = models.CharField(max_length=50, null=True, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "patients"

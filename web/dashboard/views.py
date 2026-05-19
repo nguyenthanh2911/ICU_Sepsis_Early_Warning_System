@@ -12,7 +12,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.safestring import mark_safe
 
-from .models import Alert, Prediction
+from .models import Alert, Patient, Prediction
 
 
 def _risk_badge(level: str) -> str:
@@ -32,6 +32,12 @@ def patient_list(request: HttpRequest) -> HttpResponse:
     critical = 0
     warning = 0
 
+    # Query 1 lần, tránh N+1
+    patient_db: Dict[str, Patient] = {
+        p.patient_id: p
+        for p in Patient.objects.all()
+    }
+
     for row in latest:
         badge = _risk_badge(row.risk_level)
 
@@ -45,9 +51,13 @@ def patient_list(request: HttpRequest) -> HttpResponse:
         elif badge == "WARNING":
             warning += 1
 
-        # Synthetic name/room (since not stored)
+        # Lấy tên và phòng thật từ DB patients
+        db_patient = patient_db.get(row.patient_id)
+        real_name = db_patient.name if db_patient else f"Patient {row.patient_id}"
         digits = "".join([c for c in row.patient_id if c.isdigit()])
-        room = f"ICU-{int(digits or 0) % 10:02d}"
+        real_ward = (db_patient.ward if db_patient and db_patient.ward else None) or (
+            f"ICU-{int(digits or '0') % 10:02d}"
+        )
 
         # Kiểm tra bệnh nhân đã được acknowledge chưa
         is_confirmed = Alert.objects.filter(
@@ -58,8 +68,8 @@ def patient_list(request: HttpRequest) -> HttpResponse:
         patients.append(
             {
                 "patient_id": row.patient_id,
-                "name": f"Patient {row.patient_id}",
-                "room": room,
+                "name": real_name,
+                "room": real_ward,
                 "risk_score": float(row.risk_score),
                 "risk_pct": float(row.risk_score) * 100.0,
                 "risk_level": badge,
