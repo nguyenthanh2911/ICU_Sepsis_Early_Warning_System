@@ -60,18 +60,20 @@ now = pd.Timestamp.now("UTC")
 rows = [
     {
         "patient_id": f"P{(i % 20) + 1:04d}",
-        "timestamp": (now - pd.Timedelta(hours=i)).isoformat(),
-        "heart_rate":       _clip(np.random.normal(85, 20), 40, 160),
-        "systolic_bp":      _clip(np.random.normal(110, 20), 70, 180),
-        "diastolic_bp":     _clip(np.random.normal(70, 15), 40, 110),
-        "temperature":      _clip(np.random.normal(37.5, 1.0), 35.5, 40.5),
-        "spo2":             _clip(np.random.normal(96, 4), 80, 100),
-        "respiratory_rate": _clip(np.random.normal(18, 6), 8, 40),
-        "lactate":          _clip(np.random.exponential(2.0), 0.3, 12),
-        "wbc":              _clip(np.random.normal(10, 5), 1, 35),
-        "creatinine":       _clip(np.random.exponential(1.5), 0.3, 10),
-        "bilirubin":        _clip(np.random.exponential(1.0), 0.1, 20),
-        "platelet":         _clip(np.random.normal(220, 90), 20, 600),
+        # Tất cả timestamp trong 24h để DriftDetector query được hết
+        "timestamp": (now - pd.Timedelta(minutes=5 * i)).isoformat(),
+        # Phân phối lệch hẳn so với reference (mô phỏng sepsis) → drift cao
+        "heart_rate":       _clip(np.random.normal(110, 15), 40, 160),
+        "systolic_bp":      _clip(np.random.normal(90, 15), 70, 180),
+        "diastolic_bp":     _clip(np.random.normal(55, 10), 40, 110),
+        "temperature":      _clip(np.random.normal(38.8, 0.5), 35.5, 40.5),
+        "spo2":             _clip(np.random.normal(88, 5), 80, 100),
+        "respiratory_rate": _clip(np.random.normal(28, 6), 8, 40),
+        "lactate":          _clip(np.random.exponential(4.0), 0.3, 12),
+        "wbc":              _clip(np.random.normal(18, 5), 1, 35),
+        "creatinine":       _clip(np.random.exponential(3.0), 0.3, 10),
+        "bilirubin":        _clip(np.random.exponential(2.5), 0.1, 20),
+        "platelet":         _clip(np.random.normal(120, 60), 20, 600),
     }
     for i in range(200)
 ]
