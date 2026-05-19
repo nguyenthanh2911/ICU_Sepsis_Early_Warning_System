@@ -2267,12 +2267,9 @@ Hệ thống sử dụng **6 bảng PostgreSQL**, trong đó bảng `predictions
 
 ### Giao diện 1 — Dashboard chính (danh sách bệnh nhân)
 
-```
 
 ![Danh sách bệnh nhân](docs/report/DanhSanhBenhNhan.png)
 
-
-```
 
 ### Giao diện 2 — Chi tiết bệnh nhân (real-time)
 
