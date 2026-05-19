@@ -52,11 +52,11 @@
       {% if early_warning %}
       <div id="ew-banner" class="pd-ew-card">
         <div class="pd-ew-title">
-          <span class="pd-ew-dot"></span> Cảnh báo sớm
+          <span class="pd-ew-dot"></span> Nguy cơ Sepsis — 6 giờ tới
         </div>
         <div class="pd-ew-row">
           <div class="pd-ew-item">
-            <span class="pd-ew-lbl">Xác suất</span>
+            <span class="pd-ew-lbl">T+6h ML</span>
             <div class="pd-ew-bar-wrap">
               <div id="ew-prob-bar" class="pd-ew-bar pd-bar-prob" style="width:{{ ew_probability_pct }}%"></div>
             </div>
@@ -70,7 +70,7 @@
             <span class="pd-ew-val"><span id="ew-trend">{{ ew_trend_pct }}</span>%</span>
           </div>
           <div class="pd-ew-item">
-            <span class="pd-ew-lbl">Threshold</span>
+            <span class="pd-ew-lbl">Ngưỡng</span>
             <div class="pd-ew-bar-wrap">
               <div id="ew-thresh-bar" class="pd-ew-bar pd-bar-thresh" style="width:{{ ew_thresh_pct }}%"></div>
             </div>

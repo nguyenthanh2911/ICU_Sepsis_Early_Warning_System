@@ -208,7 +208,7 @@ class SepsisPredictor:
             "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
         }
 
-        # Early warning (30 phút)
+        # Early warning (T+6h)
         ew_result = self._ew_predictor.predict_early_warning(
             patient_id=patient_id,
             current_vitals={
@@ -223,7 +223,8 @@ class SepsisPredictor:
                 'creatinine':       vital_request.creatinine,
                 'bilirubin':        vital_request.bilirubin,
                 'platelet':         vital_request.platelet,
-            }
+            },
+            risk_score_t6h=risk_score,  # THÊM: truyền risk score T+6h
         )
         early_warning = EarlyWarningResult(**ew_result)
 

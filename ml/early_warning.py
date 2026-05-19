@@ -316,15 +316,19 @@ class EarlyWarningPredictor:
         self,
         patient_id: str,
         current_vitals: Dict[str, Any],
+        risk_score_t6h: float = 0.0,   # THÊM: risk score từ XGBoost T+6h
     ) -> Dict[str, Any]:
         """
-        Kết hợp 3 scores để tính xác suất sepsis trong 30 phút tới.
+        Kết hợp 3 scores + ML T+6h để tính xác suất sepsis trong 6 giờ tới.
 
         Returns dict:
         {
             "early_warning_probability": float,   # 0.0 - 1.0
             "early_warning_level": str,           # LOW / MEDIUM / HIGH
-            "time_window_minutes": int,           # = 30
+            "time_window_minutes": int,           # = 360
+            "horizon_hours": int,                 # = 6
+            "risk_score_t6h": float,              # raw ML score
+            "rule_score": float,                  # raw rule-based score
             "trend_score": float,
             "rate_of_change_score": float,
             "threshold_score": float,
@@ -339,21 +343,26 @@ class EarlyWarningPredictor:
         roc_score    = self._rate_of_change_score(patient_id)
         thresh_score = self._threshold_score(current_vitals)
 
-        # Weighted combination:
-        # threshold quan trọng nhất (0.5) vì phản ánh trạng thái hiện tại
-        # trend quan trọng thứ 2 (0.3) vì phản ánh hướng thay đổi
-        # rate of change ít nhất (0.2) vì có thể nhiễu
-        probability = (
+        # Weighted combination (rule-based)
+        rule_score = (
             thresh_score * 0.50 +
             trend_score  * 0.30 +
             roc_score    * 0.20
         )
+
+        # Nếu có risk_score_t6h từ XGBoost, blend với rule-based
+        # risk_score_t6h chiếm 60% (ML model), rule-based 40%
+        if risk_score_t6h > 0.0:
+            probability = risk_score_t6h * 0.60 + rule_score * 0.40
+        else:
+            probability = rule_score
         probability = float(np.clip(probability, 0.0, 1.0))
 
-        # Phân mức độ
-        if probability >= 0.70:
+        # Phân mức độ — dùng ngưỡng T+6h
+        # risk >= 0.5 → HIGH (vì T+6h imbalance ~10%, ngưỡng thấp hơn)
+        if probability >= 0.50:
             level = "HIGH"
-        elif probability >= 0.40:
+        elif probability >= 0.25:
             level = "MEDIUM"
         else:
             level = "LOW"
@@ -364,7 +373,10 @@ class EarlyWarningPredictor:
         return {
             "early_warning_probability": round(probability, 4),
             "early_warning_level":       level,
-            "time_window_minutes":       30,
+            "time_window_minutes":       360,   # 6 giờ thay vì 30 phút
+            "horizon_hours":             6,
+            "risk_score_t6h":            round(risk_score_t6h, 4),
+            "rule_score":                round(rule_score, 4),
             "trend_score":               round(trend_score, 4),
             "rate_of_change_score":      round(roc_score, 4),
             "threshold_score":           round(thresh_score, 4),
