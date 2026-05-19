@@ -138,23 +138,42 @@ async def create_alert(payload: AlertCreate) -> AlertResponse:
 
     db: Session = SessionLocal()
     try:
-        alert = AlertORM(
-            alert_id=str(uuid.uuid4()),
-            patient_id=payload.patient_id,
-            risk_score=float(payload.risk_score),
-            risk_level=str(payload.risk_level),
-            top_features=payload.top_features,
-                        sofa_score=int(payload.sofa_score),
-            news2_score=int(payload.news2_score),
-            alert_type=payload.alert_type,
-            created_at=now,
-            acknowledged=False,
-            ack_by=None,
-            ack_at=None,
-        )
-        db.add(alert)
-        db.commit()
-        db.refresh(alert)
+        # Check if an unacknowledged alert already exists for this patient
+        existing_alert = db.query(AlertORM).filter(
+            AlertORM.patient_id == payload.patient_id,
+            AlertORM.acknowledged.is_(False)
+        ).first()
+
+        if existing_alert:
+            # Update the existing pending alert with newest vitals/features
+            existing_alert.risk_score = float(payload.risk_score)
+            existing_alert.risk_level = str(payload.risk_level)
+            existing_alert.top_features = payload.top_features
+            existing_alert.sofa_score = int(payload.sofa_score)
+            existing_alert.news2_score = int(payload.news2_score)
+            existing_alert.created_at = now
+            
+            db.commit()
+            db.refresh(existing_alert)
+            alert = existing_alert
+        else:
+            alert = AlertORM(
+                alert_id=str(uuid.uuid4()),
+                patient_id=payload.patient_id,
+                risk_score=float(payload.risk_score),
+                risk_level=str(payload.risk_level),
+                top_features=payload.top_features,
+                sofa_score=int(payload.sofa_score),
+                news2_score=int(payload.news2_score),
+                alert_type=payload.alert_type,
+                created_at=now,
+                acknowledged=False,
+                ack_by=None,
+                ack_at=None,
+            )
+            db.add(alert)
+            db.commit()
+            db.refresh(alert)
     finally:
         db.close()
 
