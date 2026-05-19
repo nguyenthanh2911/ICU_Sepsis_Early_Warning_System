@@ -33,11 +33,9 @@
 
       <!-- Avatar & Patient Info Card -->
       <div class="pd-avatar-card">
-        <img
-          src="{% if patient_gender == 'F' %}{% static 'dashboard/images/avatar_female.png' %}{% else %}{% static 'dashboard/images/avatar_male.png' %}{% endif %}"
-          alt="Avatar"
-          class="pd-avatar-img"
-        />
+        <div class="pd-avatar-circle {% if patient_gender == 'F' %}pd-avatar-f{% else %}pd-avatar-m{% endif %}">
+          {% if patient_gender == 'F' %}♀{% else %}♂{% endif %}
+        </div>
         <div class="pd-avatar-name">{{ patient_name }}</div>
         <div class="pd-avatar-meta">
           {% if patient_gender == 'F' %}♀ Nữ{% else %}♂ Nam{% endif %}
@@ -279,13 +277,26 @@
   text-align: center;
   box-shadow: 0 2px 8px rgba(127,119,221,.07);
 }
-.pd-avatar-img {
+.pd-avatar-circle {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(127,119,221,.2);
-  margin-bottom: 10px;
+  margin: 0 auto 10px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  font-weight: 700;
+}
+.pd-avatar-f {
+  background-color: #ffe4e6;
+  color: #e11d48;
+  border: 2px solid #fecdd3;
+}
+.pd-avatar-m {
+  background-color: #e0f2fe;
+  color: #0284c7;
+  border: 2px solid #bae6fd;
 }
 .pd-avatar-name {
   font-size: 13px;
