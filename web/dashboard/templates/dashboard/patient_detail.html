@@ -1,3 +1,4 @@
+{% load static %}
 {% extends "dashboard/base.html" %}
 {% block content %}
 <div class="pd-page">
@@ -7,8 +8,8 @@
     <div class="pd-topbar-left">
       <a href="/" class="pd-back-btn">← Quay lại</a>
       <div>
-        <div class="pd-patient-name">{{ patient_id }}</div>
-        <div class="pd-patient-meta">ICU · Chi tiết bệnh nhân</div>
+        <div class="pd-patient-name">{{ patient_name }}</div>
+        <div class="pd-patient-meta">{{ patient_id }} · {{ patient_ward }} · Chi tiết bệnh nhân</div>
       </div>
     </div>
     <div class="pd-topbar-right">
@@ -29,6 +30,23 @@
 
     <!-- LEFT PANEL -->
     <div class="pd-left-panel">
+
+      <!-- Avatar & Patient Info Card -->
+      <div class="pd-avatar-card">
+        <img
+          src="{% if patient_gender == 'female' or patient_gender == 'nữ' %}{% static 'dashboard/images/avatar_female.png' %}{% else %}{% static 'dashboard/images/avatar_male.png' %}{% endif %}"
+          alt="Avatar"
+          class="pd-avatar-img"
+        />
+        <div class="pd-avatar-name">{{ patient_name }}</div>
+        <div class="pd-avatar-meta">
+          {% if patient_gender == 'female' or patient_gender == 'nữ' %}♀{% else %}♂{% endif %} {{ patient_gender|capfirst }}
+        </div>
+        {% if patient_age %}
+        <div class="pd-avatar-meta">🎂 {{ patient_age }} tuổi</div>
+        {% endif %}
+        <div class="pd-avatar-meta">🏥 {{ patient_ward }}</div>
+      </div>
 
       <!-- Risk Score Card -->
       <div class="pd-risk-card">
@@ -252,6 +270,34 @@
 .pd-timestamp{font-size:11px;color:#bbb;display:flex;align-items:center;gap:6px}
 .pd-timestamp::before{content:'';display:inline-block;width:6px;height:6px;
   border-radius:50%;background:#1D9E75;animation:blink-dot 2s ease-in-out infinite}
+/* ── Avatar card ── */
+.pd-avatar-card {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 14px;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(127,119,221,.07);
+}
+.pd-avatar-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(127,119,221,.2);
+  margin-bottom: 10px;
+}
+.pd-avatar-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+.pd-avatar-meta {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 2px;
+}
 </style>
 
 <script>

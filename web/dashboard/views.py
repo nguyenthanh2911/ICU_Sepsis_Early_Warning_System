@@ -100,6 +100,14 @@ def patient_list(request: HttpRequest) -> HttpResponse:
 def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
     # 24 latest prediction records for chart
     qs = Prediction.objects.filter(patient_id=patient_id).order_by("-timestamp")[:24]
+
+    # Lấy thông tin bệnh nhân từ DB
+    patient_obj = Patient.objects.filter(patient_id=patient_id).first()
+    patient_name = patient_obj.name if patient_obj else patient_id
+    patient_age = patient_obj.age if patient_obj else None
+    patient_gender = (patient_obj.gender or "").lower() if patient_obj else ""
+    patient_ward = patient_obj.ward if patient_obj else "ICU"
+
     records = list(reversed(list(qs)))
 
     risk_series = [
@@ -219,6 +227,10 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
         request,
         "dashboard/patient_detail.html",
         {
+            "patient_name": patient_name,
+            "patient_age": patient_age,
+            "patient_gender": patient_gender,
+            "patient_ward": patient_ward,
             "patient_id": patient_id,
             "risk_score": risk_score,
             "risk_level": level,
