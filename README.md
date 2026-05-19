@@ -608,14 +608,20 @@ docker compose ps
 
 Services sẽ chạy tại:
 
-| Service | URL |
-|---------|-----|
-| Django Dashboard | http://localhost:8000 |
-| FastAPI ML Service | http://localhost:8001/docs |
-| FastAPI Alert Service | http://localhost:8002/docs |
-| MLflow UI | http://localhost:5000 |
-| Grafana | http://localhost:3000 (admin/admin) |
-| Prometheus | http://localhost:9090 |
+| Service | URL | Ghi chú |
+|---------|-----|---------|
+| Django Dashboard | http://localhost:8000 | Web UI chính — danh sách & chi tiết bệnh nhân |
+| FastAPI ML Service | http://localhost:8001/docs | Swagger UI — thử API `/vitals`, `/health`, `/metrics` |
+| FastAPI Alert Service | http://localhost:8002/docs | Swagger UI — WebSocket real-time alerts |
+| MLflow UI | http://localhost:5000 | Theo dõi thí nghiệm training |
+| Grafana | http://localhost:3000 | Dashboard giám sát (user/pass: `admin`/`admin`) |
+| Prometheus | http://localhost:9090 | Metrics — nhập PromQL như `predictions_total`, `inference_seconds_count` |
+
+> **Lưu ý:** Một số endpoint chỉ trả về JSON, không hiển thị giao diện web:
+> - `http://localhost:8001/health` — kiểm tra ML Service hoạt động (trả về `{"status":"ok"}`)
+> - `http://localhost:8002/health` — kiểm tra Alert Service hoạt động
+> - `http://localhost:5432` — PostgreSQL (giao thức nhị phân, không phải HTTP). Dùng `psql` hoặc GUI tool (DBeaver, pgAdmin) để kết nối.
+> - `http://localhost:9090/targets` — Prometheus targets page, kiểm tra trạng thái scrape
 
 ### Bước 3 — Khởi tạo database
 
