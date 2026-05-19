@@ -288,7 +288,6 @@ CNM/
 ├── 📄 pytest.ini                  # Pytest config: testpaths=tests, verbose, short traceback
 ├── 📄 README.md                   # Tài liệu dự án
 ├── 📄 requirements.txt            # 28 dependencies: fastapi, django, xgboost, mlflow, evidently, prefect...
-├── 📄 test_vitals.json            # Mẫu vitals JSON dùng cho test (P0001, 1 record)
 │
 ├── 📁 artifacts/                  # Artifacts sinh ra từ quá trình training
 │   └── 📦 preprocessor_t6h.joblib # sklearn Pipeline (SimpleImputer + StandardScaler) đã fit
