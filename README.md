@@ -2273,40 +2273,13 @@ Hệ thống sử dụng **6 bảng PostgreSQL**, trong đó bảng `predictions
 
 ### Giao diện 2 — Chi tiết bệnh nhân (real-time)
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  ← Quay lại     BN: Nguyễn Văn A — ICU-1 — Giường 3            │
-├─────────────────────────┬────────────────────────────────────────┤
-│  RISK SCORE HIỆN TẠI    │  VITALS HIỆN TẠI                       │
-│                         │  ┌─────────┬──────────┬─────────────┐  │
-│       🔴  0.82          │  │HR: 112  │BP: 88/54 │  Temp: 39.1 │  │
-│       CRITICAL          │  │SpO2: 93%│RR: 24   │             │  │
-│  [Acknowledge Alert]    │  └─────────┴──────────┴─────────────┘  │
-│                         │                                        │
-│  SOFA: 6  |  NEWS2: 9   │  BIỂU ĐỒ RISK SCORE (2 giờ gần nhất) │
-│                         │  1.0│              ╭──╮               │
-│  TOP FEATURES (SHAP)    │  0.7│─ ─ ─ ─ ─ ─╯  ╰──             │
-│  lactate_trend  ████    │  0.3│                                 │
-│  spo2_min_60m   ███     │  0.0└─────────────────────────        │
-│  hr_mean_15m    ██      │     -120m   -60m    -30m    now       │
-│  resp_trend     ██      │                                        │
-│  temp_max_60m   █       │  Cập nhật lần tới: ~5 phút            │
-└─────────────────────────┴────────────────────────────────────────┘
-```
+![Chi tiết bệnh nhân ](docs/report/ChiTietBenhNhan.png)
+
 
 ### Giao diện 3 — Quản lý Alert
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  QUẢN LÝ CẢNH BÁO                   [Tất cả ▼]  [Hôm nay ▼]   │
-├──────┬──────────┬───────────┬──────────┬────────────┬──────────┤
-│  ID  │ Bệnh nhân│  Thời gian│ Severity │ Trạng thái │  Action  │
-├──────┼──────────┼───────────┼──────────┼────────────┼──────────┤
-│ A001 │   P001   │ 08:32:00  │ CRITICAL │ ⏳ Pending  │[Confirm]│
-│ A002 │   P005   │ 07:45:00  │ WARNING  │ ✅ Confirmed│  [Xem]  │
-│ A003 │   P012   │ 06:10:00  │ CRITICAL │ ✅ Confirmed│  [Xem]  │
-└──────┴──────────┴───────────┴──────────┴────────────┴──────────┘
-```
+![Quản lý cảnh báo](docs/report/QuanLyCanhBao.png)
+
 
 ---
 
@@ -2884,7 +2857,10 @@ Mô hình **XGBoost** (n_estimators=150, max_depth=4, learning_rate=0.05, scale_
 
 Toàn bộ thí nghiệm (params, metrics, model artifacts, feature_names.json) được ghi tự động lên **MLflow Tracking Server** tại `http://localhost:5000`. Model đạt **AUROC 0.827** được tự động register lên **Production stage** trong MLflow Model Registry.
 
-*(Chèn ảnh: MLflow experiment list, training metrics, model registry)*
+![MLflowExperimentList](docs/report/MLflowExperimentList.png)
+![ModelRegistry](docs/report/ModelRegistry.png)
+![TrainingMetrics](docs/report/TrainingMetrics.png)
+
 
 ### 2.2.2 Chức năng dự đoán real-time (FastAPI ML Service)
 
@@ -2908,7 +2884,9 @@ Các endpoint bổ sung:
 - `GET /vitals/{patient_id}/history` — lịch sử vitals + SHAP + early warning
 - `GET /metrics` — Prometheus metrics (predictions_total, predictions_by_risk_total, inference_seconds)
 
-*(Chèn ảnh: Swagger UI /docs, response mẫu với risk score và SHAP features)*
+![ Swagger UI /docs](docs/report/service.png)
+![response mẫu với risk score và SHAP features](docs/report/SHAPfeatures.png)
+
 
 ### 2.2.3 Chức năng dashboard và cảnh báo real-time (Django)
 
@@ -2931,7 +2909,10 @@ Khi risk score ≥ 0.7, hệ thống tự động:
 
 Y tá có thể acknowledge alert trực tiếp từ dashboard, trạng thái cập nhật real-time cho toàn bộ người dùng qua WebSocket.
 
-*(Chèn ảnh: trang danh sách bệnh nhân, trang chi tiết, popup cảnh báo CRITICAL)*
+![Danh sách bệnh nhân](docs/report/DanhSanhBenhNhan.png)
+![Trang chi tiết](docs/report/ChiTietBenhNhan.png)
+![popup cảnh báo](docs/report/QuanLyCanhBao.png)
+
 
 ### 2.2.4 Chức năng monitoring và tự động retrain
 
@@ -2954,4 +2935,6 @@ Hệ thống giám sát được tổ chức qua **3 tầng**:
   2. **run_training()** → subprocess `python -m ml.train` với current data
   3. **compare_and_promote()** → new_auroc > production_auroc + 0.01 → promote lên Production, ngược lại giữ model cũ
 
-*(Chèn ảnh: Grafana dashboard metrics, Prefect flow run history, Evidently drift report)*
+![Grafana dashboard metrics](docs/report/GrafanaDashboardMetrics.png)
+![Prefect flow run history](docs/report/PrefectFlowRunHistory.png)
+
