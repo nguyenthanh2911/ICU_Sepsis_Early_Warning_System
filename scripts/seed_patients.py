@@ -8,31 +8,31 @@ import psycopg2
 from dotenv import load_dotenv
 
 
-VIETNAMESE_NAMES: List[str] = [
-    "Nguyễn Văn An",
-    "Trần Thị Bình",
-    "Lê Văn Cường",
-    "Phạm Thị Dung",
-    "Hoàng Văn Đức",
-    "Vũ Thị Hạnh",
-    "Đặng Văn Hùng",
-    "Bùi Thị Lan",
-    "Ngô Văn Minh",
-    "Đỗ Thị Nga",
-    "Hồ Văn Phúc",
-    "Dương Thị Quỳnh",
-    "Lý Văn Sơn",
-    "Mai Thị Trang",
-    "Đinh Văn Tuấn",
-    "Chu Thị Vân",
-    "Tạ Văn Xuyên",
-    "Ninh Thị Yến",
-    "Cao Văn Khoa",
-    "Hà Thị Liên",
-    "Tôn Văn Nam",
-    "Lâm Thị Oanh",
-    "Kiều Văn Quang",
-    "Phan Thị Thu",
+PATIENTS: List[Tuple[str, str]] = [
+    ("Nguyễn Văn An",    "M"),
+    ("Trần Thị Bình",    "F"),
+    ("Lê Văn Cường",     "M"),
+    ("Phạm Thị Dung",    "F"),
+    ("Hoàng Văn Đức",    "M"),
+    ("Vũ Thị Hạnh",      "F"),
+    ("Đặng Văn Hùng",    "M"),
+    ("Bùi Thị Lan",      "F"),
+    ("Ngô Văn Minh",     "M"),
+    ("Đỗ Thị Nga",       "F"),
+    ("Hồ Văn Phúc",      "M"),
+    ("Dương Thị Quỳnh",  "F"),
+    ("Lý Văn Sơn",       "M"),
+    ("Mai Thị Trang",    "F"),
+    ("Đinh Văn Tuấn",    "M"),
+    ("Chu Thị Vân",      "F"),
+    ("Tạ Văn Xuyên",     "M"),
+    ("Ninh Thị Yến",     "F"),
+    ("Cao Văn Khoa",     "M"),
+    ("Hà Thị Liên",      "F"),
+    ("Tôn Văn Nam",      "M"),
+    ("Lâm Thị Oanh",     "F"),
+    ("Kiều Văn Quang",   "M"),
+    ("Phan Thị Thu",     "F"),
 ]
 
 
@@ -50,12 +50,12 @@ def main() -> None:
 
     params = _conn_params_from_env()
 
+    sampled = random.sample(PATIENTS, 20)
+
     patients: List[Tuple[str, str, int, str, str]] = []
-    for i in range(1, 21):
-        pid = f"P{i:03d}"
-        name = random.choice(VIETNAMESE_NAMES)
+    for i, pid in enumerate(f"P{i+1:03d}" for i in range(20)):
+        name, gender = sampled[i]
         age = random.randint(45, 80)
-        gender = random.choice(["M", "F"])
         ward = random.choice(["ICU-1", "ICU-2"])
         patients.append((pid, name, age, gender, ward))
 
