@@ -78,7 +78,7 @@ class DriftDetector:
         drifted_columns: List[str] = []
 
         for m in report_dict.get("metrics", []):
-            if m.get("metric") != "DataDriftPreset":
+            if m.get("metric") not in ("DataDriftTable", "DataDriftPreset"):
                 continue
             result = m.get("result") or {}
 
@@ -100,22 +100,11 @@ class DriftDetector:
         reference = self.reference_data.sample(min(len(self.reference_data), 1000), random_state=42)
         current = self.get_recent_production_data(hours=24)
 
-        print(f"[DEBUG] Reference rows: {len(reference)}, columns: {list(reference.columns)}")
-        print(f"[DEBUG] Current rows: {len(current)}, columns: {list(current.columns)}")
-        if len(current) > 0:
-            print(f"[DEBUG] Current heart_rate: mean={current.heart_rate.mean():.1f}, std={current.heart_rate.std():.1f}")
-        else:
-            print("[DEBUG] WARNING: current data is EMPTY!")
-
         report = Report(metrics=[DataDriftPreset()])
         report.run(reference_data=reference, current_data=current)
         report_dict = report.as_dict()
 
-        print(f"[DEBUG] Report metric names: {[m.get('metric') for m in report_dict.get('metrics', [])]}")
-        print(f"[DEBUG] Report keys: {list(report_dict.keys())}")
-
         _dataset_drift, drift_score, drifted_columns = self._extract_drift_metrics(report_dict)
-        print(f"[DEBUG] drift_score={drift_score}, is_drift={bool(drift_score > 0.7)}, drifted_columns={drifted_columns}")
 
         result = DriftResult(
             drift_score=float(drift_score),
