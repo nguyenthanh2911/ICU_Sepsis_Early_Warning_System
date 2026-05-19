@@ -84,6 +84,10 @@ def patient_list(request: HttpRequest) -> HttpResponse:
     total = len(patients)
     stable = max(total - critical - warning, 0)
 
+    # Lấy timestamp của prediction mới nhất (cho footer)
+    latest_pred = Prediction.objects.order_by("-timestamp").values("timestamp").first()
+    latest_timestamp = latest_pred["timestamp"].isoformat() if latest_pred else ""
+
     return render(
         request,
         "dashboard/patient_list.html",
@@ -93,6 +97,7 @@ def patient_list(request: HttpRequest) -> HttpResponse:
             "critical": critical,
             "warning": warning,
             "stable": stable,
+            "latest_timestamp": latest_timestamp,
         },
     )
 

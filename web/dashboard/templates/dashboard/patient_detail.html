@@ -462,9 +462,11 @@ async function fetchLatest(){
       if(noShap) noShap.style.display = 'none';
     }
 
-    /* timestamp */
+    /* timestamp — dùng thời gian từ server */
     const ts = document.getElementById('last-updated');
-    if(ts) ts.textContent = 'Cập nhật lúc: ' + new Date().toLocaleTimeString('vi-VN');
+    if(ts && d.timestamp) {
+      ts.textContent = 'Cập nhật lúc: ' + new Date(d.timestamp).toLocaleTimeString('vi-VN');
+    }
 
   } catch(e){ console.warn('Poll error:', e); }
 }

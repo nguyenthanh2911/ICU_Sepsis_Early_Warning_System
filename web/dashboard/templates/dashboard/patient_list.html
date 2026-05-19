@@ -312,7 +312,8 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
     <div class="db-footer">
       <span class="db-footer-dot"></span>
       <span id="db-last-updated">Đang kết nối...</span>
-      &nbsp;·&nbsp; Cập nhật 
+      &nbsp;·&nbsp; Cập nhật
+      <span id="db-latest-ts" style="display:none">{{ latest_timestamp }}</span>
     </div>
   </div>
 
@@ -325,11 +326,18 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
     const clock = document.getElementById('db-clock');
     const date  = document.getElementById('db-date');
     const ts    = document.getElementById('db-last-updated');
+    const serverTs = document.getElementById('db-latest-ts');
     if (clock) clock.textContent = now.toLocaleTimeString('vi-VN');
     if (date)  date.textContent  = now.toLocaleDateString('vi-VN', {
       weekday:'short', day:'2-digit', month:'2-digit', year:'numeric'
     });
-    if (ts) ts.textContent = 'Cập nhật lúc: ' + now.toLocaleTimeString('vi-VN');
+    if (ts) {
+      if (serverTs && serverTs.textContent) {
+        ts.textContent = 'Cập nhật lúc: ' + new Date(serverTs.textContent).toLocaleTimeString('vi-VN');
+      } else {
+        ts.textContent = 'Cập nhật lúc: ' + now.toLocaleTimeString('vi-VN');
+      }
+    }
   }
   tick();
   setInterval(tick, 1000);
