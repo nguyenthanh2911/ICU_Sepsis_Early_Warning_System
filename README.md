@@ -38,106 +38,89 @@
 
 ### Bài toán
 
-**Sepsis** (nhiễm khuẩn huyết) là phản ứng đe dọa tính mạng của cơ thể khi nhiễm trùng, gây ra hơn **270.000 ca tử vong mỗi năm** tại Mỹ. Phát hiện sớm trong **1–6 giờ đầu** giúp tăng tỉ lệ sống sót lên 80%, nhưng y tá ICU phải theo dõi hàng chục chỉ số sinh tồn (heart rate, SpO₂, huyết áp, nhiệt độ…) liên tục cho nhiều bệnh nhân cùng lúc — dẫn đến nguy cơ bỏ sót dấu hiệu chuyển nặng.
+**Sepsis** (nhiễm khuẩn huyết) là tình trạng đe doạ tính mạng, thường diễn tiến nhanh và cần can thiệp sớm. Trong ICU, nhân viên y tế phải theo dõi liên tục nhiều chỉ số sinh tồn và xét nghiệm (nhịp tim, SpO₂, huyết áp, nhiệt độ, RR, lactate, WBC, …) cho nhiều bệnh nhân cùng lúc, nên dễ bỏ sót các dấu hiệu chuyển nặng khi dữ liệu thay đổi theo thời gian.
+
+Mục tiêu của đề tài là xây dựng hệ thống cảnh báo sớm dựa trên dữ liệu vitals/labs dạng stream để ước lượng **nguy cơ sepsis trong 6 giờ tới (T+6h)** và đồng thời phát hiện **xu hướng xấu nhanh trong ~30 phút gần nhất** để kích hoạt cảnh báo kịp thời.
 
 ### Giải pháp
 
 Xây dựng hệ thống **MLOps hoàn chỉnh** theo 3 tầng:
 
-- **🧪 Data & Training**: Sinh dữ liệu synthetic ICU mô phỏng sinh lý bệnh nhân (có confounders: tuổi, nhiễu thiết bị, overlap sepsis/non-sepsis), xây dựng features lâm sàng (SOFA, NEWS2, qSOFA + rolling statistics), train mô hình **XGBoost** dự đoán nguy cơ T+6h, theo dõi thí nghiệm qua **MLflow**
-- **🚀 Serving & Deployment**: API dự đoán real-time qua **FastAPI** (kết hợp XGBoost + SHAP + rule-based early warning), dashboard quan sát bằng **Django + Channels WebSocket**, cảnh báo qua **Alert Service**, đóng gói bằng **Docker Compose**, CI/CD qua **GitHub Actions**
-- **📊 Monitoring & Retraining**: Phát hiện data drift bằng **Evidently AI**, tự động retrain bằng **Prefect**, theo dõi hệ thống bằng **Prometheus + Grafana**
+- **🧪 Data & Training**: Sinh dữ liệu synthetic ICU mô phỏng sinh lý bệnh nhân (confounders: tuổi, nhiễu thiết bị, overlap sepsis/non-sepsis, missing labs), tạo nhãn **T+6h** (`sepsis_in_next_6h`) và **split theo patient_id** để tránh leakage; train mô hình **XGBoost** trên **11 raw features** (vitals + labs) với pipeline tiền xử lý (imputer + scaler) và lưu thành `artifacts/preprocessor_t6h.joblib`; theo dõi/đăng ký model qua **MLflow**.
+- **🚀 Serving & Deployment**: **FastAPI ML Service** nhận `POST /vitals` → preprocess → dự đoán risk_score → giải thích **SHAP top-features**; đồng thời tính **SOFA/NEWS2** và **early-warning** (blend rule-based 30 phút gần nhất với risk_score T+6h). Kết quả được lưu vào PostgreSQL (`predictions`) và khi vượt ngưỡng sẽ gửi sang **Alert Service**; **Django + Channels WebSocket** hiển thị dashboard và cập nhật realtime. Triển khai bằng **Docker Compose**.
+- **📊 Monitoring & Retraining**: Giám sát metrics bằng **Prometheus + Grafana**; phát hiện drift với **Evidently** (so sánh `vital_records` 24h gần nhất với reference parquet) và tự động retrain bằng **Prefect**, promote model khi chất lượng tốt hơn.
 
 ### Mục tiêu kỹ thuật
 
 | Chỉ số | Mục tiêu | Ghi chú |
 |--------|----------|---------|
-| **AUROC (Test)** | > 0.75 (Production) / > 0.70 (Staging) | Ngưỡng register model trong `train.py` |
-| **Sensitivity** | > 75% | Threshold phân lớp mặc định = 0.4 |
-| **Specificity** | > 85% | Tính từ confusion matrix trong `evaluate.py` |
-| **F1 Score** | > 0.65 | Theo dõi qua MLflow metrics |
-| **Inference latency** | < 200ms / single row | Prometheus `inference_seconds` histogram |
-| **Cảnh báo (end-to-end)** | < 5 phút | Từ lúc POST /vitals đến WebSocket push |
-| **ML alert lead time** | > 6 giờ trước sepsis | Label T+6h (`sepsis_in_next_6h`) |
-| **Rule-based lead time** | > 30 phút trước sepsis | `EarlyWarningPredictor` trend + rate + threshold |
-| **Data drift threshold** | Drift score > 0.7 | Kích hoạt Prefect retrain flow |
-| **Model promotion gap** | New AUROC > Production + 0.01 | Ngưỡng promote trong `retrain_flow.py` |
-| **CV variance** | std_auroc < 0.05 | Nếu > 0.08 → tự động tighten regularization |
-| **Label imbalance ratio** | ~9:1 (neg:pos) | SMOTE với sampling_strategy=0.4 |
+| **AUROC (Test)** | > 0.75 (Production) / > 0.70 (Staging) | Register trong `ml/train.py` + ràng buộc generalization gap: Prod `gap<0.12`, Staging `gap<0.18` |
+| **Sensitivity** | > 75% | Tính ở threshold mặc định `0.4` trong `ml/evaluate.py` |
+| **Specificity** | > 85% | Tính từ confusion matrix trong `ml/evaluate.py` |
+| **F1 Score** | > 0.65 | Theo dõi trong MLflow metrics (thr=0.4) |
+| **Inference latency** | < 200ms / single row | Metrics Prometheus `inference_seconds` (ML service middleware) |
+| **Cảnh báo (end-to-end)** | < 5 phút | `POST /vitals` → Alert Service → WebSocket Django (mục tiêu vận hành) |
+| **ML alert lead time** | ~6 giờ | Bài toán T+6h với label `sepsis_in_next_6h` |
+| **Early warning window** | ~30 phút history | Rule-based dùng 6 mẫu gần nhất (~30 phút), blend với `risk_score_t6h`; ngưỡng level: `HIGH>=0.50`, `MEDIUM>=0.25` |
+| **Data drift threshold** | Drift score > 0.7 | `monitoring/drift_detector.py` đặt `is_drift = drift_score > 0.7` |
+| **Model promotion gap** | New AUROC > Prod + 0.01 | `monitoring/retrain_flow.py` promote nếu tốt hơn Production +0.01 (hoặc chưa có Production) |
+| **CV variance** | std_auroc ≤ 0.05 | `ml/models/xgboost_model.py` cảnh báo khi `std_auroc>0.05`; `ml/train.py` tự “tighten” khi `std_auroc>0.08` |
+| **Label imbalance ratio** | Thường cao (neg:pos) | Auto bật SMOTE khi `imbalance_ratio>5` (hoặc `--augment`), `sampling_strategy=0.4` |
 
 ---
 
 ## 2. Kiến trúc hệ thống
 
-```
-                         ┌──────────────────────────────────────────┐
-                         │         DATA & TRAINING LAYER            │
-                         │                                          │
-                         │  data_generator.py                       │
-                         │   ├── PhysiologicalModel (vitals synth)  │
-                         │   │   ├── age confounder, equipment noise│
-                         │   │   └── overlap: bad_spikes / recovery │
-                         │   └── LabResultModel (labs synth)        │
-                         │       └── missing labs ~5%, early normal │
-                         │          │                               │
-                         │          ▼                               │
-                         │  labeling.py  (create_t6h_labels)        │
-                         │   └── sepsis_in_next_6h = y[t]           │
-                         │          │                               │
-                         │          ▼                               │
-                         │  feature_builder.py                      │
-                         │   ├── Rolling stats (15/60/240 phút)     │
-                         │   ├── Clinical scores (SOFA,NEWS2,qSOFA) │
-                         │   └── Time-since-last-abnormal-HR        │
-                         │          │                               │
-                         │          ▼                               │
-                         │  train.py                                │
-                         │   ├── Patient split (~60/20/20)          │
-                         │   ├── SimpleImputer + StandardScaler     │
-                         │   ├── Auto SMOTE (ratio=0.4)             │
-                         │   ├── 5-fold StratifiedKFold CV          │
-                         │   └── XGBoost (150 est, max_depth=4)     │
-                         │          │                               │
-                         │          ▼                               │
-                         │  MLflow Tracking + Registry              │
-                         │   ├── Log: params, metrics, model        │
-                         │   └── Stage: Staging → Production        │
-                         └──────────────────────────────────────────┘
-                                      │
-                              ┌───────┴────────┐
-                              │   PostgreSQL   │
-                              │  (predictions, │
-                              │   alerts,      │
-                              │   patients,    │
-                              │   vital_records│
-                              │   admissions)  │
-                              └───────┬────────┘
-                                      │
-         ┌────────────────────────────┼────────────────────────────┐
-         │                            │                            │
-         ▼                            ▼                            ▼
-┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
-│  SERVING LAYER      │   │  ALERTING LAYER     │   │  WEB LAYER          │
-│                     │   │                     │   │                     │
-│  FastAPI ML Service │   │  FastAPI Alert      │   │  Django Dashboard   │
-│  (port 8001)        │   │  Service (port 8002)│   │  (port 8000)        │
-│                     │   │                     │   │                     │
-│  POST /vitals       │   │  POST /alerts       │   │  / → patient_list   │
-│   ├─ SOFA, NEWS2    │──►│  GET /alerts        │   │  /patients/{id}/    │
-│   ├─ Preprocess     │   │  GET /alerts/stats  │   │  /alerts/           │
-│   ├─ XGBoost → risk │   │  WebSocket push     │   │  WebSocket Daphne   │
-│   ├─ SHAP explain   │   │  PATCH acknowledge  │   │  API endpoints      │
-│   ├─ EarlyWarning   │   │  GET /metrics       │   │                     │
-│   ├─ Lưu PostgreSQL │   │  (active_alerts)    │   │                     │
-│   └─ GET /metrics   │   └─────────────────────┘   └─────────────────────┘
-│     (predictions_*) │             │                        │
-└─────────────────────┘             └──────────┬─────────────┘
-                                               │
-                                               ▼
-                                      ┌─────────────────────┐
-                                      │  WebSocket Client   │
-                                      │  (Browser)          │
-                                      └─────────────────────┘
+`s/Labs synthetic + noise      │
+       │   └── sepsis_onset_hour per patient      │
+       │          │                               │
+       │          ▼                               │
+       │  data_pipeline/labeling.py               │
+       │   └── create_t6h_labels() →              │
+       │       sepsis_in_next_6h                  │
+       │          │                               │
+       │          ▼                               │
+       │  ml/train.py                             │
+       │   ├── Split by patient_id (no leakage)   │
+       │   ├── Imputer + Scaler →                 │
+       │   │   artifacts/preprocessor_t6h.joblib  │
+       │   ├── Optional SMOTE (imbalance)         │
+       │   ├── 5-fold CV probe                     │
+       │   └── XGBoost (early stopping)           │
+       │          │                               │
+       │          ▼                               │
+       │  MLflow Tracking + Model Registry        │
+       │   ├── Log: params/metrics/model          │
+       │   └── Stage: Staging/Production          │
+       └──────────────────────────────────────────┘
+              │
+            ┌───────┴────────┐
+            │   PostgreSQL   │
+            │  patients      │
+            │  admissions    │
+            │  predictions   │
+            │  alerts        │
+            │  vital_records │
+            └───────┬────────┘
+              │
+   ┌────────────────────────────┼────────────────────────────┐
+   │                            │                            │
+   ▼                            ▼                            ▼
+┌─────────────────────┐   ┌────────────────────────┐   ┌─────────────────────┐
+│  SERVING LAYER      │   │  ALERTING LAYER        │   │  WEB LAYER          │
+│                     │   │                        │   │                     │
+│  FastAPI ML Service │   │  FastAPI Alert Service │   │  Django Dashboard   │
+│  (port 8001)        │   │  (port 8002)           │   │  (port 8000)        │
+│                     │   │                        │   │                     │
+│  POST /vitals       │──►│  POST /alerts          │   │  / (patient list)   │
+│   ├─ Preprocess     │   │  PATCH /alerts/.../ack │   │  /patients/{id}/    │
+│   ├─ XGBoost risk    │   │  GET /alerts, /stats  │   │  /alerts/           │
+│   ├─ SHAP top-5     │   │  /metrics              │   │  Poll HTTP (10s)    │
+│   ├─ SOFA/NEWS2     │   │  WebSocket: /ws/all    │   │  WebSocket:         │
+│   ├─ Early warning  │   │            /ws/{pid}   │   │   ws://:8002/ws/all │
+│   └─ Persist →      │   └────────────────────────┘   └─────────────────────┘
+│      predictions    │
+└─────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                      MONITORING & RETRAINING LAYER                       │
@@ -169,116 +152,9 @@ Xây dựng hệ thống **MLOps hoàn chỉnh** theo 3 tầng:
 
 ### Luồng dữ liệu chính
 
-```
-╔══════════════════════════════════════════════════════════════════╗
-║                    ICU SIMULATION (scripts/simulate_realtime.py) ║
-║  20 patients: 40% sepsis, 60% non-sepsis                        ║
-║  3 risk groups: LOW (~10), WARNING (~4), HIGH (~6)              ║
-║  Mỗi 10s thực = 1h mô phỏng — 240 steps total                   ║
-║  Đọc từ data/raw/real_time_icu.csv, map P0001→P001 (seed IDs)   ║
-╚══════════════════════════════════════════════════════════════════╝
-                           │
-                           │ POST /vitals (concurrent.futures, max_workers=20)
-                           ▼
-╔══════════════════════════════════════════════════════════════════╗
-║              FastAPI ML Service — localhost:8001                 ║
-║                                                                  ║
-║  1️⃣ Validate input (Pydantic VitalRequest)                       ║
-║     - heart_rate∈[20,250], spo2∈[50,100], temp∈[30,45], ...     ║
-║                                                                  ║
-║  2️⃣ Clinical scores (từ raw vitals, không cần preprocess)       ║
-║     - calculate_sofa() → respiratory + coagulation + liver       ║
-║                          + renal + cardiovascular (0–20)         ║
-║     - calculate_news2() → RR + SpO2 + temp + BP + HR (0–20)     ║
-║                                                                  ║
-║  3️⃣ Preprocess (sklearn Pipeline)                                ║
-║     - SimpleImputer(strategy='median') → điền giá trị thiếu      ║
-║     - StandardScaler → chuẩn hoá 11 features                     ║
-║     - Fallback: fit-on-fly nếu pipeline chưa được fit            ║
-║                                                                  ║
-║  4️⃣ XGBoost predict_proba → risk_score ∈ [0, 1]                 ║
-║     - risk < 0.3  → "LOW"                                       ║
-║     - 0.3 – 0.7  → "WARNING"                                    ║
-║     - ≥ 0.7      → "CRITICAL" + alert_triggered = true          ║
-║                                                                  ║
-║  5️⃣ SHAP TreeExplainer → top-5 features (feature + shap_value)  ║
-║                                                                  ║
-║  6️⃣ EarlyWarningPredictor (rule-based + ML T+6h)                ║
-║     - trend_score (30 phút history)              [weight 30%]   ║
-║     - rate_of_change_score (đạo hàm bậc 1)      [weight 20%]   ║
-║     - threshold_score (mức gần ngưỡng nguy hiểm) [weight 50%]   ║
-║     - Kết hợp với risk_score_t6h từ XGBoost                      ║
-║     - → early_warning_probability (0..1) + level (LOW/MED/HIGH) ║
-║     - → contributing_factors (danh sách yếu tố nguy cơ cụ thể)  ║
-║                                                                  ║
-║  7️⃣ Lưu vào PostgreSQL (predictions table):                     ║
-║     risk_score, risk_level, alert_triggered,                     ║
-║     sofa_score, news2_score, inference_time_ms,                  ║
-║     raw vitals (HR, BP, SpO2, temp, RR, lactate, wbc, ...),    ║
-║     early_warning scores (prob, level, trend, roc, threshold)   ║
-║                                                                  ║
-║  8️⃣ Prometheus metrics:                                         ║
-║     predictions_total (Counter)                                  ║
-║     predictions_by_risk_total{risk_level} (Counter)              ║
-║     inference_seconds (Histogram)                                ║
-╚══════════════════════════════════════════════════════════════════╝
-              │
-              │
-              ├── risk < 0.3 ────────────────────────────────────── log only
-              │
-              ├── 0.3 ≤ risk < 0.7 ──────────────────────────────── Dashboard WARNING
-              │                                                      (Django hiển thị badge vàng)
-              │
-              ├── risk ≥ 0.7 ──────────────────────────────────────►
-              │                                                      │
-              │                                                      ▼
-              │                                          ╔══════════════════════════════╗
-              │                                          ║  Alert Service — :8002       ║
-              │                                          ║  POST /alerts                ║
-              │                                          ║  - Nếu đã có pending alert    ║
-              │                                          ║    cho cùng patient → update  ║
-              │                                          ║  - Nếu chưa → tạo mới         ║
-              │                                          ║  - Lưu vào PostgreSQL (alert) ║
-              │                                          ║  - Push WebSocket real-time   ║
-              │                                          ║  - Prometheus: active_alerts  ║
-              │                                          ╚══════════════════════════════╝
-              │                                                      │
-              └── early_warning HIGH (nhưng risk < 0.7) ────────────►│
-                                                                     │
-                                                                     ▼
-                                                    ╔════════════════════════════════╗
-                                                    ┌────────────────────────────────┐
-                                                    │  Django Dashboard — :8000     │
-                                                    │  (Daphne ASGI + WebSocket)    │
-                                                    │                               │
-                                                    │  Danh sách bệnh nhân (/)      │
-                                                    │  ├── Stats: total/critical/   │
-                                                    │  │   warning/stable            │
-                                                    │  ├── Bảng: ID, name, room,    │
-                                                    │  │   risk_score bar, level     │
-                                                    │  ├── Sort: unconfirmed trước   │
-                                                    │  └── WS real-time update       │
-                                                    │                               │
-                                                    │  Chi tiết (/patients/{id}/)   │
-                                                    │  ├── Risk score card (số lớn) │
-                                                    │  ├── Early warning bars        │
-                                                    │  ├── Vitals grid (5 cards)     │
-                                                    │  ├── Risk chart (2h gần nhất) │
-                                                    │  ├── SHAP bar chart (top-5)   │
-                                                    │  ├── SOFA + NEWS2 badges       │
-                                                    │  └── Acknowledge alert button  │
-                                                    │                               │
-                                                    │  Alerts (/alerts/)             │
-                                                    │  ├── Tabs: all/pending/confirm │
-                                                    │  ├── Table: ID, patient, time  │
-                                                    │  ├── Severity + status badges  │
-                                                    │  ├── Confirm button + toast    │
-                                                    │  └── WebSocket push real-time  │
-                                                    └────────────────────────────────┘
-```
+![Kiến trúc hệ thống ](docs/report/quytrinh.png)
 
----
-
+------
 ## 3. Cấu trúc thư mục
 
 ```
@@ -423,10 +299,10 @@ CNM/
 | **Ngôn ngữ** | Python | 3.10 | Ngôn ngữ lập trình chính |
 | **Data Processing** | Pandas | 2.2.1 | Xử lý dữ liệu dạng bảng, rolling statistics, groupby operations |
 | | NumPy | 1.26.4 | Tính toán số học, random generation, mảng đa chiều |
-| | DuckDB | 0.10.1 | Truy vấn nhanh file Parquet trong quá trình training |
-| | PyArrow | 15.0.2 | Định dạng cột cho Parquet, trao đổi dữ liệu hiệu năng cao |
+| | PyArrow | 15.0.2 | Backend I/O cho Parquet (`read_parquet`/`to_parquet`) phục vụ drift + seed data |
+| | DuckDB | 0.10.1 | (Optional) Hỗ trợ truy vấn Parquet nhanh; hiện chưa dùng trực tiếp trong code |
 | **Machine Learning** | XGBoost | 2.0.3 | Mô hình chính: predict_proba, early_stopping, scale_pos_weight |
-| | Scikit-learn | 1.4.1 | Pipeline (SimpleImputer, StandardScaler), KNNImputer, StratifiedKFold |
+| | Scikit-learn | 1.4.1.post1 | Pipeline (SimpleImputer, StandardScaler), KNNImputer, StratifiedKFold |
 | | imbalanced-learn | ≥0.11.0 | SMOTE oversampling (sampling_strategy=0.4) cho label imbalance |
 | | SHAP | 0.45.0 | TreeExplainer giải thích top-5 features ảnh hưởng nhất |
 | | Joblib | 1.3.2 | Lưu/tải model artifacts (preprocessor pipeline, model) |
@@ -435,16 +311,17 @@ CNM/
 | | Uvicorn | 0.28.1 | ASGI server cho FastAPI |
 | | Pydantic | 2.6.4 | Validation schemas: VitalRequest, PredictionResponse, EarlyWarningResult |
 | | httpx | 0.27.0 | Async HTTP client: ML Service → Alert Service, Dashboard ↔ Services |
+| | websockets | 12.0 | WebSocket protocol support (FastAPI WS endpoints; browser clients) |
 | **Web Dashboard** | Django | 5.0.3 | Web framework chính (port 8000) |
-| | Channels | 4.0.0 | Xử lý WebSocket real-time (AlertConsumer) |
-| | Daphne | 4.1.0 | ASGI server cho Django + WebSocket |
+| | Channels | 4.0.0 | ASGI routing/WebSocket infra (hiện realtime chủ yếu nhận từ WS Alert Service) |
+| | Daphne | 4.1.0 | ASGI server cho Django (container `web`) |
 | | psycopg2-binary | 2.9.9 | Kết nối Django ORM đến PostgreSQL |
 | **Database** | PostgreSQL | 15 | Lưu trữ: patients, predictions, alerts, vital_records, admissions |
 | | SQLAlchemy | 2.0.29 | ORM cho FastAPI services (PredictionORM, AlertORM) |
-| **Container & CI/CD** | Docker | compose | 6 services: postgres, mlflow, prometheus, grafana, ml_service, alert_service, web |
-| | pytest | 8.1.1 | Test framework (~70+ tests, 5 test files) |
+| **Container & CI/CD** | Docker | compose | 7 services: postgres, mlflow, prometheus, grafana, ml_service, alert_service, web |
+| | pytest | 8.1.1 | Unit + integration tests |
 | | pytest-cov | 4.1.0 | Code coverage tracking |
-| | GitHub Actions | — | CI/CD pipeline: test → build → deploy |
+| | GitHub Actions | — | CI: pytest + Docker Compose smoke test; scheduled retrain workflow |
 | **Monitoring** | Prometheus | latest | Thu thập metrics: predictions_total, inference_seconds, active_alerts |
 | | Grafana | latest | Dashboard trực quan hoá metrics hệ thống (port 3000) |
 | | Evidently AI | 0.4.16 | DataDriftPreset: phát hiện drift giữa reference vs production 24h |
@@ -454,10 +331,10 @@ CNM/
 
 ```
 📄 requirements.txt     — 28 dependencies (fastapi, django, xgboost, mlflow, evidently, prefect...)
-📄 docker-compose.yml   — 6 services + bridge network `icu-network`
+📄 docker-compose.yml   — 7 services + bridge network `icu-network`
 📄 pytest.ini            — testpaths=tests, verbose, short traceback
 📄 monitoring/prometheus/prometheus.yml — scrape interval 15s, targets: ml_service:8001, alert_service:8002
-📄 .env                  — POSTGRES_USER/PASS/DB, MLFLOW_TRACKING_URI, SECRET_KEY (not committed)
+📄 .env / .env.example   — POSTGRES_USER/PASS/DB, MLFLOW_TRACKING_URI, SECRET_KEY
 ```
 
 ---
@@ -492,7 +369,7 @@ ICUSepsisGenerator (──patients, ──hours, ──interval)
 | `--output` | `data/synthetic/icu_data_synthetic.csv` | File output |
 
 Thông số đầu ra (mặc định):
-- **20 bệnh nhân** × **24 giờ** × **12 mẫu/giờ** = **5.760 records**
+- **20 bệnh nhân** × **24 giờ** × **12 mẫu/giờ** = **5.760 records** (với `interval=5` phút)
 - **40% sepsis** (8 bệnh nhân), **60% non-sepsis** (12 bệnh nhân)
 - Severity distribution: mild 40%, moderate 40%, severe 20%
 - Sepsis onset: random trong khoảng giờ **8–18** (giữa ca trực)
@@ -527,20 +404,21 @@ Thông số đầu ra (mặc định):
 | **Recovery period (sepsis)** | 15% BN sepsis | Thoáng có vitals bình thường (HR ổn, hết sốt) |
 | **Equipment noise** | 2% / vital | Nhiễu ngẫu nhiên: HR±40, BP±35, SpO₂±8, Temp±1.2°C |
 | **Missing labs** | ~5% / lab | Giá trị lab bị thiếu ngẫu nhiên |
-| **Age confounder** | > 70 tuổi | Baseline vitals dịch chuyển ±10% (HR, BP cao hơn) |
+| **Age confounder** | > 70 tuổi | Baseline vitals dịch chuyển ~±10% (theo patient, có thể tăng/giảm) |
 | **Early normal labs (sepsis)** | 20% BN sepsis | Labs bình thường trong 8h đầu trước khi onset |
 | **Mild abnormal labs (non-sepsis)** | 25% BN non-sepsis | Labs hơi bất thường dù không sepsis |
 
 ### 5.5 Pipeline dữ liệu
 
 ```
-data_generator.py                labeling.py                     split_by_patient()
+data_pipeline/data_generator.py  labeling.py                     split_by_patient()
      │                               │                                │
      ▼                               ▼                                ▼
 ┌──────────────┐            ┌──────────────────┐            ┌──────────────────┐
 │  Synthetic   │──CSV/DF───►│ create_t6h_labels│            │  Train (~60%)    │
 │  ICU Data    │            │                  │            │  Val   (~20%)    │
-│  (5760 rows) │            │ sepsis_in_next_6h│            │  Test  (~20%)    │
+│ (default:    │            │ sepsis_in_next_6h│            │  Test  (~20%)    │
+│  5760 rows)  │            │                  │            │                  │
 └──────────────┘            │ y[t] = 1 nếu     │            │                  │
                             │ onset ∈ (t, t+6h]│            │ Patient-based     │
                             │ y[t] = 0 còn lại │            │ (no leakage)     │
@@ -558,10 +436,10 @@ Pipeline training (`train.py`) tự động:
 
 | Label | Số lượng | Tỉ lệ |
 |-------|----------|-------|
-| `sepsis_label = 1` (có sepsis) | ~2.304 rows (40% BN) | ~40% |
-| `sepsis_in_next_6h = 1` (positive) | ~576 rows | ~10% |
-| `sepsis_in_next_6h = 0` (negative) | ~5.184 rows | ~90% |
-| **Imbalance ratio** | **~9:1** | SMOTE ratio=0.4 |
+| `sepsis_label = 1` (có sepsis) | 2.304 rows (default) | 40% |
+| `sepsis_in_next_6h = 1` (positive) | 576 rows (default) | 10% |
+| `sepsis_in_next_6h = 0` (negative) | 5.184 rows (default) | 90% |
+| **Imbalance ratio** | **9:1** | SMOTE ratio=0.4 |
 
 ### 5.7 Database schema
 
@@ -570,11 +448,11 @@ Hệ thống lưu dữ liệu vào **PostgreSQL** với 6 bảng (xem `docs/data
 | Bảng | Mục đích | Số cột | Ghi chú |
 |------|----------|--------|---------|
 | `patients` | Thông tin bệnh nhân | 6 | patient_id PK, name, age, gender, ward |
-| `admissions` | Lịch sử nhập viện | 6 | FK→patients, admitted_at, discharged_at, bed |
+| `admissions` | Lịch sử nhập viện | 6 | FK→patients, admitted_at, discharged_at, bed_number |
 | `vital_records` | Chỉ số sinh tồn thô | 14 | FK→patients, timestamp, 6 vitals + 5 labs |
-| `predictions` | Kết quả dự đoán (bảng chính) | 21 | risk_score, level, sofa, news2, 11 raw vitals, 5 early_warning scores |
+| `predictions` | Kết quả dự đoán (bảng chính) | 26 | risk_score, level, sofa, news2, 11 raw vitals, 5 early_warning scores |
 | `alerts` | Cảnh báo | 12 | alert_id UUID, FK→patients, risk, acknowledged, ack_by |
-| `prediction_results` | Bảng cũ (DEPRECATED) | 10 | Giữ lại cho tương thích ngược |
+| `prediction_results` | Bảng cũ (DEPRECATED) | 9 | Giữ lại cho tương thích ngược |
 
 ---
 
@@ -720,15 +598,14 @@ Pipeline machine learning gồm **8 bước**, từ sinh dữ liệu synthetic �
 │  │ Data Gen │──►│ T+6h Label   │──►│ Preprocessing    │                │
 │  └──────────┘   └──────────────┘   └──────────────────┘                │
 │       │                │                    │                           │
-│  data_generator   labeling.py         ICUPreprocessor /                 │
-│  .py              create_t6h_        sklearn Pipeline                   │
-│  Physiological    labels()           (SimpleImputer +                   │
-│  Model +           + split_by_       StandardScaler)                    │
-│  LabResultModel    patient()                                            │
+│  data_pipeline/    labeling.py        sklearn Pipeline                  │
+│  data_generator.py create_t6h_labels  (SimpleImputer +                 │
+│                    + split_by_patient  StandardScaler)                 │
+│  (PhysiologicalModel + LabResultModel)                                  │
 │       │                │                    │                           │
 │       ▼                ▼                    ▼                           │
 │  ┌──────────────────────────────────────────────────────┐               │
-│  │  Step 4: Feature Engineering                         │               │
+│  │  Step 4 (optional): Feature Engineering               │               │
 │  │  ┌────────────────────────────────────────────────┐  │               │
 │  │  │ feature_builder.py                             │  │               │
 │  │  │ ├── Rolling stats (3/12/48 intervals)          │  │               │
@@ -779,7 +656,7 @@ Pipeline machine learning gồm **8 bước**, từ sinh dữ liệu synthetic �
 │  │  register_model() → Model Registry (Production/Stag) │               │
 │  │  load_production_model_with_metadata()               │               │
 │  │    → ML Service loading (prefer Prod → Staging)      │               │
-│  │  save to artifacts/preprocessor_t6h.joblib            │               │
+│  │  (preprocessor_t6h.joblib được `train.py` lưu ở local)│               │
 │  └──────────────────────────────────────────────────────┘               │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -823,12 +700,12 @@ Pipeline machine learning gồm **8 bước**, từ sinh dữ liệu synthetic �
 │  ┌──────────────────────────────────────────────────────┐               │
 │  │  6️⃣ EarlyWarningPredictor (rule-based + ML T+6h)     │               │
 │  │                                                        │               │
-│  │     trend_score (30 phút history)    [weight 30%]     │               │
-│  │     rate_of_change_score (đạo hàm)   [weight 20%]     │               │
-│  │     threshold_score (ngưỡng lâm sàng) [weight 50%]    │               │
-│  │     + risk_score_t6h từ XGBoost                        │               │
-│  │     → early_warning_probability (0..1)                 │               │
-│  │     → level: LOW / MEDIUM / HIGH                       │               │
+│  │     History: 6 records (mặc định interval 5 phút)      │               │
+│  │     time_window_minutes=360 (horizon_hours=6)           │               │
+│  │     rule_score = 0.50*threshold + 0.30*trend + 0.20*roc│               │
+│  │     probability = 0.60*risk_score_t6h + 0.40*rule_score│               │
+│  │       (nếu risk_score_t6h > 0; else = rule_score)      │               │
+│  │     level: HIGH (>=0.50) / MEDIUM (>=0.25) / LOW       │               │
 │  │     → contributing_factors:                            │               │
 │  │       "Lactate cao (4.2 mmol/L)",                      │               │
 │  │       "Nhịp tim tăng nhanh (+15 trong 30 phút)",       │               │
@@ -836,18 +713,20 @@ Pipeline machine learning gồm **8 bước**, từ sinh dữ liệu synthetic �
 │  └──────────────────────┬───────────────────────────────┘               │
 │                         ▼                                               │
 │  ┌──────────────────────────────────────────────────────┐               │
-│  │  7️⃣ Lưu PostgreSQL (predictions table, 21 cột)        │               │
+│  │  7️⃣ Lưu PostgreSQL (predictions table, 26 cột)        │               │
 │  │     risk_score, risk_level, alert_triggered,           │               │
 │  │     sofa_score, news2_score, inference_time_ms,       │               │
 │  │     6 raw vitals (HR, BP, SpO2, temp, RR),            │               │
 │  │     5 labs (lactate, wbc, creat, bili, platelet),     │               │
 │  │     5 early_warning scores (prob, level, trend,        │               │
 │  │       rate_of_change, threshold)                      │               │
+│  │     + id (SERIAL) + created_at                         │               │
 │  └──────────────────────┬───────────────────────────────┘               │
 │                         ▼                                               │
 │  ┌──────────────────────────────────────────────────────┐               │
-│  │  8️⃣ Gọi Alert Service nếu risk ≥ 0.7                  │               │
-│  │     hoặc early_warning HIGH (dù risk < 0.7)           │               │
+│  │  8️⃣ Gọi Alert Service:                                │               │
+│  │     - sepsis CRITICAL: risk ≥ 0.7                      │               │
+│  │     - early_warning: level=HIGH và chưa CRITICAL       │               │
 │  └──────────────────────────────────────────────────────┘               │
 │                                                                         │
 │  Prometheus metrics exposed:                                            │
@@ -865,7 +744,7 @@ Pipeline machine learning gồm **8 bước**, từ sinh dữ liệu synthetic �
 │  │  Reference: data/processed/features_train.parquet     │               │
 │  │  Current  : vital_records trong 24h qua (PostgreSQL)  │               │
 │  │  Drift score > 0.7 → is_drift = True                  │               │
-│  │  Save HTML report: reports/drift/drift_YYYYMMDD_*     │               │
+│  │  Save HTML report: reports/drift/drift_report_*.html   │               │
 │  └──────────────────────┬───────────────────────────────┘               │
 │                         ▼                                               │
 │              ┌──────────────────────┐                                   │
@@ -891,7 +770,7 @@ Pipeline machine learning gồm **8 bước**, từ sinh dữ liệu synthetic �
 │         ▼                    ▼                                          │
 │  ┌──────────────────────────────────────────────────────┐               │
 │  │  Prometheus + Grafana                                │               │
-│  │  Scrape: ml_service:8001/metrics, alert_svc:8002    │               │
+│  │  Scrape: ml_service:8001/metrics, alert_service:8002  │               │
 │  │  Grafana dashboard: icu_dashboard.json (port 3000)   │               │
 │  └──────────────────────────────────────────────────────┘               │
 └─────────────────────────────────────────────────────────────────────────┘
